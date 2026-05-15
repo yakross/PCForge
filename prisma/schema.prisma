@@ -1,0 +1,345 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// -----------------------------------------------------------------------------
+// USER MANAGEMENT & AUTHENTICATION
+// -----------------------------------------------------------------------------
+enum Role {
+  USER
+  MODERATOR
+  ADMIN
+}
+
+model User {
+  id               String    @id @default(uuid())
+  email            String    @unique
+  passwordHash     String?
+  firstName        String?
+  lastName         String?
+  role             Role      @default(USER)
+  emailVerified    Boolean   @default(false)
+  twoFactorEnabled Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  sessions       Session[]
+  addresses      Address[]
+  orders         Order[]
+  reviews        Review[]
+  wishlists      Wishlist[]
+  builds         Build[]
+  carts          Cart?
+  supportTickets SupportTicket[]
+  notifications  Notification[]
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expires      DateTime
+  createdAt    DateTime @default(now())
+}
+
+model Address {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  street       String
+  city         String
+  state        String
+  country      String
+  postalCode   String
+  isDefault    Boolean  @default(false)
+  orders       Order[]
+}
+
+// -----------------------------------------------------------------------------
+// PRODUCT CATALOG
+// -----------------------------------------------------------------------------
+model Category {
+  id          String    @id @default(uuid())
+  name        String    @unique // e.g. "CPUs", "GPUs", "Motherboards"
+  description String?
+  slug        String    @unique
+  parentId    String?
+  parent      Category? @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children    Category[] @relation("CategoryHierarchy")
+  products    Product[]
+  compatibilityRules1 CompatibilityRule[] @relation("Category1Rules")
+  compatibilityRules2 CompatibilityRule[] @relation("Category2Rules")
+}
+
+model Brand {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  logoUrl     String?
+  products    Product[]
+}
+
+model Product {
+  id          String    @id @default(uuid())
+  name        String
+  slug        String    @unique
+  sku         String    @unique
+  description String
+  basePrice   Decimal   @db.Decimal(10, 2)
+  categoryId  String
+  brandId     String
+  isActive    Boolean   @default(true)
+  imageUrl    String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  category    Category  @relation(fields: [categoryId], references: [id])
+  brand       Brand     @relation(fields: [brandId], references: [id])
+  pcComponent PcComponent?
+  inventory   Inventory?
+  regionalPrices RegionalPrice[]
+  priceHistory PriceHistory[]
+  reviews     Review[]
+  wishlists   Wishlist[]
+  buildItems  BuildItem[]
+  cartItems   CartItem[]
+  orderItems  OrderItem[]
+  benchmarks  Benchmark[]
+}
+
+// Technical details for the compatibility engine
+model PcComponent {
+  id          String   @id @default(uuid())
+  productId   String   @unique
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  type        String   // CPU, GPU, MOTHERBOARD, RAM, PSU, CASE, STORAGE, COOLER
+  socket      String?  // AM4, AM5, LGA1700
+  formFactor  String?  // ATX, Micro-ATX, Mini-ITX
+  ramType     String?  // DDR4, DDR5
+  tdpWattage  Int?     // For PSU calculation
+  lengthMm    Int?     // For GPU/Case clearance
+  pcieGen     String?  // PCIe 4.0, PCIe 5.0
+  chipset     String?  // B650, Z790
+  details     Json?    // Any extra specs stored as JSON
+}
+
+model CompatibilityRule {
+  id              String   @id @default(uuid())
+  category1Id     String
+  category2Id     String
+  category1       Category @relation("Category1Rules", fields: [category1Id], references: [id])
+  category2       Category @relation("Category2Rules", fields: [category2Id], references: [id])
+  conditionType   String   // "MATCH", "LESS_THAN", "GREATER_THAN"
+  property1       String   // e.g., "socket"
+  property2       String   // e.g., "socket"
+  isCritical      Boolean  @default(true) // Error vs Warning
+  description     String
+}
+
+// -----------------------------------------------------------------------------
+// BUILDS (User PC Configurations)
+// -----------------------------------------------------------------------------
+model Build {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  isPublic    Boolean   @default(false)
+  totalWattage Int      @default(0)
+  estimatedPrice Decimal @db.Decimal(10, 2)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  items       BuildItem[]
+}
+
+model BuildItem {
+  id          String   @id @default(uuid())
+  buildId     String
+  build       Build    @relation(fields: [buildId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id])
+  quantity    Int      @default(1)
+}
+
+// -----------------------------------------------------------------------------
+// INVENTORY & PRICING (Global & Regional)
+// -----------------------------------------------------------------------------
+model Inventory {
+  id          String   @id @default(uuid())
+  productId   String   @unique
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  stockCount  Int      @default(0)
+  reserved    Int      @default(0)
+}
+
+model RegionalPrice {
+  id          String   @id @default(uuid())
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  regionCode  String   // US, CO, MX, AR, BR
+  currency    String   // USD, COP, MXN, ARS, BRL
+  price       Decimal  @db.Decimal(10, 2)
+  taxRate     Decimal  @db.Decimal(5, 4) // e.g., 0.1900 for 19% IVA
+  importFee   Decimal  @default(0) @db.Decimal(10, 2)
+  updatedAt   DateTime @updatedAt
+
+  @@unique([productId, regionCode])
+}
+
+model PriceHistory {
+  id          String   @id @default(uuid())
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  regionCode  String
+  price       Decimal  @db.Decimal(10, 2)
+  recordedAt  DateTime @default(now())
+}
+
+model GlobalPrice {
+  id          String   @id @default(uuid())
+  baseCurrency String  @default("USD")
+  targetCurrency String // COP, MXN
+  exchangeRate Decimal @db.Decimal(10, 4)
+  updatedAt   DateTime @updatedAt
+
+  @@unique([baseCurrency, targetCurrency])
+}
+
+// -----------------------------------------------------------------------------
+// SHOPPING CART & ORDERS
+// -----------------------------------------------------------------------------
+model Cart {
+  id        String     @id @default(uuid())
+  userId    String     @unique
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     CartItem[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model CartItem {
+  id        String   @id @default(uuid())
+  cartId    String
+  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  quantity  Int      @default(1)
+}
+
+model Coupon {
+  id              String   @id @default(uuid())
+  code            String   @unique
+  discountPercent Decimal? @db.Decimal(5, 2)
+  discountAmount  Decimal? @db.Decimal(10, 2)
+  expiresAt       DateTime?
+  isActive        Boolean  @default(true)
+  orders          Order[]
+}
+
+model Order {
+  id            String      @id @default(uuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id])
+  addressId     String
+  address       Address     @relation(fields: [addressId], references: [id])
+  couponId      String?
+  coupon        Coupon?     @relation(fields: [couponId], references: [id])
+  status        String      @default("PENDING") // PENDING, PAID, SHIPPED, DELIVERED, CANCELLED
+  totalAmount   Decimal     @db.Decimal(10, 2)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  items         OrderItem[]
+  payment       Payment?
+}
+
+model OrderItem {
+  id        String   @id @default(uuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  quantity  Int
+  price     Decimal  @db.Decimal(10, 2) // Price at the time of purchase
+}
+
+model Payment {
+  id              String   @id @default(uuid())
+  orderId         String   @unique
+  order           Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  provider        String   // STRIPE, MERCADOPAGO, PAYPAL
+  transactionId   String?  @unique
+  status          String   // SUCCESS, FAILED, PENDING
+  amount          Decimal  @db.Decimal(10, 2)
+  currency        String
+  createdAt       DateTime @default(now())
+}
+
+// -----------------------------------------------------------------------------
+// COMMUNITY & ENGAGEMENT
+// -----------------------------------------------------------------------------
+model Review {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  rating    Int      // 1 to 5
+  comment   String?
+  createdAt DateTime @default(now())
+}
+
+model Wishlist {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, productId])
+}
+
+model Benchmark {
+  id          String   @id @default(uuid())
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  gameName    String
+  resolution  String   // 1080p, 1440p, 4K
+  quality     String   // Low, Medium, High, Ultra
+  avgFps      Int
+  recordedAt  DateTime @default(now())
+}
+
+// -----------------------------------------------------------------------------
+// SUPPORT & NOTIFICATIONS
+// -----------------------------------------------------------------------------
+model SupportTicket {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject   String
+  message   String
+  status    String   @default("OPEN") // OPEN, IN_PROGRESS, RESOLVED, CLOSED
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  type      String   // SYSTEM, PROMO, ORDER_UPDATE
+  createdAt DateTime @default(now())
+}

@@ -1,0 +1,145 @@
+version: '3.9'
+
+services:
+  # ─── Databases ────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: pcforge_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pcforge
+      POSTGRES_PASSWORD: pcforge_secret
+      POSTGRES_DB: pcforge_db
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U pcforge']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: pcforge_redis
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    command: redis-server --appendonly yes --requirepass redis_secret
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', 'redis_secret', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mongodb:
+    image: mongo:7
+    container_name: pcforge_mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: pcforge
+      MONGO_INITDB_ROOT_PASSWORD: mongo_secret
+      MONGO_INITDB_DATABASE: pcforge_specs
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Message Queue ─────────────────────────────────────────────
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: pcforge_rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: pcforge
+      RABBITMQ_DEFAULT_PASS: rabbit_secret
+    ports:
+      - '5672:5672'
+      - '15672:15672'  # Management UI
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: rabbitmq-diagnostics check_port_connectivity
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Search ────────────────────────────────────────────────────
+  elasticsearch:
+    image: elasticsearch:8.13.0
+    container_name: pcforge_elasticsearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - 'ES_JAVA_OPTS=-Xms512m -Xmx512m'
+    ports:
+      - '9200:9200'
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: curl -f http://localhost:9200/_cluster/health || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ─── API ───────────────────────────────────────────────────────
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile.dev
+    container_name: pcforge_api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://pcforge:pcforge_secret@postgres:5432/pcforge_db
+      REDIS_URL: redis://:redis_secret@redis:6379
+      MONGODB_URL: mongodb://pcforge:mongo_secret@mongodb:27017/pcforge_specs?authSource=admin
+      RABBITMQ_URL: amqp://pcforge:rabbit_secret@rabbitmq:5672
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+    ports:
+      - '4000:4000'
+    volumes:
+      - ./apps/api:/app
+      - /app/node_modules
+
+  # ─── Web ───────────────────────────────────────────────────────
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile.dev
+    container_name: pcforge_web
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:4000
+    ports:
+      - '3000:3000'
+    volumes:
+      - ./apps/web:/app
+      - /app/node_modules
+      - /app/.next
+
+volumes:
+  postgres_data:
+  redis_data:
+  mongo_data:
+  rabbitmq_data:
+  es_data:

@@ -1,0 +1,114 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  # ─── Lint & Type Check ──────────────────────────────────────────────────────
+  lint:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run lint
+      - run: npx tsc --noEmit --project apps/api/tsconfig.json
+      - run: npx tsc --noEmit --project apps/web/tsconfig.json
+
+  # ─── Test ───────────────────────────────────────────────────────────────────
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: pcforge
+          POSTGRES_PASSWORD: test_secret
+          POSTGRES_DB: pcforge_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: npm ci
+      - name: Run Prisma migrations
+        working-directory: apps/api
+        env:
+          DATABASE_URL: postgresql://pcforge:test_secret@localhost:5432/pcforge_test
+        run: npx prisma migrate deploy
+      - run: npm run test
+        env:
+          DATABASE_URL: postgresql://pcforge:test_secret@localhost:5432/pcforge_test
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: test_jwt_secret_at_least_32_chars_long
+          COOKIE_SECRET: test_cookie_secret_32_chars_minimum
+          STRIPE_SECRET_KEY: sk_test_placeholder
+
+  # ─── Build ──────────────────────────────────────────────────────────────────
+  build:
+    name: Build Apps
+    runs-on: ubuntu-latest
+    needs: [lint]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: https://api.pcforge.dev
+
+  # ─── Deploy (Production) ────────────────────────────────────────────────────
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [test, build]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy API to Railway
+        run: |
+          echo "Deploy API to Railway / AWS ECS here"
+          # curl -X POST "${{ secrets.RAILWAY_DEPLOY_HOOK }}"
+
+      - name: Deploy Web to Vercel
+        run: |
+          echo "Deploy Web to Vercel here"
+          # npx vercel --prod --token ${{ secrets.VERCEL_TOKEN }}
+
+      - name: Notify Slack
+        if: always()
+        run: |
+          echo "Send deploy notification"
