@@ -1,0 +1,52 @@
+================================================================================
+                    PCFORGE - ROADMAP DE DESARROLLO
+================================================================================
+
+Estado Actual:
+- Base de datos masiva con ~425 componentes (CPU, GPU, RAM, Storage, MB, PSU, Case).
+- Sistema de Divisas (USD/COP) con toggle en el Navbar.
+- Catálogo dinámico con filtros por categoría, marca y ordenamiento por rendimiento.
+- Diseño estético premium con fondos oscuros para hardware y badges dinámicos.
+
+--------------------------------------------------------------------------------
+FASE 1: MOTOR DE COMPATIBILIDAD (PRIORIDAD ALTA)
+--------------------------------------------------------------------------------
+1. Crear una función `checkCompatibility(cpuId, mbId, ramId)`:
+   - Validar Socket (ej: LGA1700 vs AM5).
+   - Validar Generación de RAM (DDR4 vs DDR5).
+   - Validar Potencia de PSU (Wattage estimado vs Recomendado).
+   - Validar Tamaño de Case (E-ATX vs Mini-ITX).
+
+--------------------------------------------------------------------------------
+FASE 2: CONSTRUCTOR DE PC (BUILDER UI)
+--------------------------------------------------------------------------------
+1. Implementar la página `/build`:
+   - Interfaz de "slots" (Procesador, Placa, etc.).
+   - Al hacer clic en un slot, abrir el catálogo filtrado por esa categoría.
+   - Mostrar el precio total acumulado en tiempo real.
+   - Panel de "Alertas de Compatibilidad" dinámico.
+
+--------------------------------------------------------------------------------
+FASE 3: PERSISTENCIA Y ESTADO GLOBAL
+--------------------------------------------------------------------------------
+1. Integrar `localStorage` para guardar el progreso del armado del PC.
+2. Implementar un Carrito de Compras funcional.
+3. Permitir "Guardar Build" para generar un enlace compartible o imagen/PDF.
+
+--------------------------------------------------------------------------------
+FASE 4: INTEGRACIÓN DE DATOS REALES (SCRAPER)
+--------------------------------------------------------------------------------
+1. Conectar el Cron Job (`/api/cron/update-prices`) con una API de precios real (opcional/premium).
+2. Implementar un sistema de "Alertas de Precio" cuando un componente baje de costo.
+
+--------------------------------------------------------------------------------
+FASE 5: DETALLE DE PRODUCTO Y COMPARATIVA
+--------------------------------------------------------------------------------
+1. Crear páginas dinámicas `/catalog/[id]`:
+   - Mostrar todas las especificaciones técnicas en una tabla elegante.
+   - Gráficos de rendimiento comparativo.
+2. Herramienta de "Comparar" entre 2 o 3 productos lado a lado.
+
+================================================================================
+Próxima Sesión Sugerida: Iniciar con la FASE 1 (Lógica de Compatibilidad).
+================================================================================
