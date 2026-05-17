@@ -153,7 +153,10 @@ export async function productRoutes(fastify: FastifyInstance) {
 
   // ─── Get Categories ───────────────────────────────────────────────────────
   fastify.get('/meta/categories', async (request, reply) => {
-    const cached = await cache.get('categories')
+    const { category } = request.query as { category?: string }
+    const cacheKey = `meta:categories:${category || 'all'}`
+    
+    const cached = await cache.get(cacheKey)
     if (cached) return reply.send({ success: true, data: cached })
 
     const categories = await prisma.product.groupBy({
@@ -163,9 +166,12 @@ export async function productRoutes(fastify: FastifyInstance) {
       orderBy: { _count: { category: 'desc' } },
     })
 
+    const brandsWhere: any = { isActive: true }
+    if (category) brandsWhere.category = category.toUpperCase()
+
     const brands = await prisma.product.groupBy({
       by: ['brand'],
-      where: { isActive: true },
+      where: brandsWhere,
       _count: { brand: true },
       orderBy: { _count: { brand: 'desc' } },
     })
@@ -174,7 +180,7 @@ export async function productRoutes(fastify: FastifyInstance) {
       categories: categories.map((c) => ({ name: c.category, count: c._count.category })),
       brands: brands.map((b) => ({ name: b.brand, count: b._count.brand })),
     }
-    await cache.set('categories', result, 600)
+    await cache.set(cacheKey, result, 600)
     return reply.send({ success: true, data: result })
   })
 

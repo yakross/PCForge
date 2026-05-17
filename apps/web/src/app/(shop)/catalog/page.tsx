@@ -27,18 +27,29 @@ export default function CatalogPage() {
 
   const [search, setSearch] = useState('')
   const [selectedCategory, setSelectedCategory] = useState(searchParams.get('category') ?? '')
+  const [selectedBrand, setSelectedBrand] = useState('')
   const [sort, setSort] = useState('newest')
   const [minPrice, setMinPrice] = useState('')
   const [maxPrice, setMaxPrice] = useState('')
   const [page, setPage] = useState(1)
   const [filtersOpen, setFiltersOpen] = useState(false)
 
+  // Fetch Meta (Categories & Brands)
+  const { data: metaData } = useQuery({
+    queryKey: ['meta', selectedCategory],
+    queryFn: () => productsApi.categories(selectedCategory),
+    select: (res) => res.data,
+  })
+
+  const availableBrands = metaData?.brands ?? []
+
   const { data, isLoading } = useQuery({
-    queryKey: ['products', { search, selectedCategory, sort, minPrice, maxPrice, page }],
+    queryKey: ['products', { search, selectedCategory, selectedBrand, sort, minPrice, maxPrice, page }],
     queryFn: () =>
       productsApi.list({
         search: search || undefined,
         category: selectedCategory || undefined,
+        brand: selectedBrand || undefined,
         sort,
         minPrice: minPrice ? Number(minPrice) : undefined,
         maxPrice: maxPrice ? Number(maxPrice) : undefined,
@@ -65,13 +76,14 @@ export default function CatalogPage() {
   const clearFilters = () => {
     setSearch('')
     setSelectedCategory('')
+    setSelectedBrand('')
     setSort('newest')
     setMinPrice('')
     setMaxPrice('')
     setPage(1)
   }
 
-  const hasFilters = search || selectedCategory || minPrice || maxPrice
+  const hasFilters = search || selectedCategory || selectedBrand || minPrice || maxPrice
 
   return (
     <div className="container py-8">
@@ -123,7 +135,7 @@ export default function CatalogPage() {
               <label className="text-sm font-medium mb-2 block">Categoría</label>
               <div className="flex flex-col gap-1">
                 <button
-                  onClick={() => { setSelectedCategory(''); setPage(1) }}
+                  onClick={() => { setSelectedCategory(''); setSelectedBrand(''); setPage(1) }}
                   className={`text-left px-3 py-1.5 rounded-lg text-sm transition-colors ${!selectedCategory ? 'bg-primary text-primary-foreground' : 'hover:bg-accent'}`}
                 >
                   Todos
@@ -131,7 +143,7 @@ export default function CatalogPage() {
                 {CATEGORIES.map((cat) => (
                   <button
                     key={cat}
-                    onClick={() => { setSelectedCategory(cat); setPage(1) }}
+                    onClick={() => { setSelectedCategory(cat); setSelectedBrand(''); setPage(1) }}
                     className={`text-left px-3 py-1.5 rounded-lg text-sm transition-colors ${selectedCategory === cat ? 'bg-primary text-primary-foreground' : 'hover:bg-accent'}`}
                   >
                     {cat}
@@ -139,6 +151,30 @@ export default function CatalogPage() {
                 ))}
               </div>
             </div>
+
+            {/* Brand */}
+            {availableBrands.length > 0 && (
+              <div>
+                <label className="text-sm font-medium mb-2 block">Marca</label>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => { setSelectedBrand(''); setPage(1) }}
+                    className={`px-3 py-1 rounded-full text-xs border transition-colors ${!selectedBrand ? 'bg-primary text-primary-foreground border-primary' : 'hover:bg-accent'}`}
+                  >
+                    Todas
+                  </button>
+                  {availableBrands.map((b: any) => (
+                    <button
+                      key={b.name}
+                      onClick={() => { setSelectedBrand(b.name); setPage(1) }}
+                      className={`px-3 py-1 rounded-full text-xs border transition-colors ${selectedBrand === b.name ? 'bg-primary text-primary-foreground border-primary' : 'hover:bg-accent'}`}
+                    >
+                      {b.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Price Range */}
             <div>

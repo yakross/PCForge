@@ -94,7 +94,7 @@ export const productsApi = {
   get: (slug: string) => api.get(`/products/${slug}`),
   getCompatible: (id: string, category?: string) =>
     api.get(`/products/${id}/compatible`, { params: { category } }),
-  categories: () => api.get('/products/meta/categories'),
+  categories: (category?: string) => api.get('/products/meta/categories', { params: { category } }),
   addReview: (id: string, data: { rating: number; title: string; body: string }) =>
     api.post(`/products/${id}/reviews`, data),
 }

@@ -1,0 +1,34 @@
+PCForge - Resumen Ejecutivo del Proyecto
+========================================
+
+1. Descripción General
+----------------------
+PCForge es un E-commerce de componentes para PC, construido con un stack completo de producción. Su característica principal es un motor de compatibilidad en tiempo real para ensambles, pagos globales y un sistema de comparación de precios internacionales.
+
+2. Tecnologías Principales (Stack)
+----------------------------------
+- Frontend: Next.js 14 (App Router + SSR), TailwindCSS, shadcn/ui.
+- Backend: Fastify (Node.js).
+- Bases de Datos y Caché: PostgreSQL 16 (Datos principales), Redis 7 (Caché y sesiones), MongoDB 7 (Especificaciones JSON).
+- Búsqueda y Eventos: Elasticsearch 8, RabbitMQ.
+- Monorepo y DevOps: Turborepo, GitHub Actions (CI/CD), Docker Compose (Entorno de desarrollo local).
+- Pagos: Stripe y MercadoPago.
+- Estado y Consultas: Zustand, TanStack React Query.
+
+3. Características Clave
+------------------------
+- Motor de Compatibilidad en Tiempo Real: Verifica automáticamente que los componentes seleccionados para armar una PC sean compatibles (Socket, RAM, Wattage, Form Factor).
+- Variación de Precios Globales: Ajusta los precios automáticamente según multiplicadores e impuestos de múltiples países.
+- Autenticación: Sistema con JWT.
+- Gestión de Carrito y Órdenes.
+
+4. Estructura del Monorepo (Turborepo)
+--------------------------------------
+- apps/api: Backend Fastify, rutas y servicios REST, Prisma ORM.
+- apps/web: Aplicación frontend en Next.js.
+- packages/types: Tipos compartidos en TypeScript.
+- docker-compose.yml: Orquestación del entorno completo (Bases de datos, caché, mensajería).
+
+5. Estado del Proyecto
+----------------------
+El proyecto está completamente estructurado, desde su base de datos con migraciones de Prisma, hasta la aplicación Next.js y Fastify API. Todo el código base se encuentra organizado en ramas principales dentro del repositorio de GitHub ("yakross/PCForge").
